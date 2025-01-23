@@ -134,9 +134,13 @@ def init_vision_client():
 @confirm_required
 @permission_required('UPLOAD')
 def upload():
-    form = UploadForm()
+    form = DescriptionForm()
     if form.validate_on_submit():
-        f = form.photo.data
+        f = request.files.get('photo')
+        if not f:
+            flash('No photo selected.', 'warning')
+            return redirect(url_for('.upload'))
+            
         filename = rename_image(f.filename)
         f.save(os.path.join(current_app.config['ALBUMY_UPLOAD_PATH'], filename))
         filename_s = resize_image(f, filename, current_app.config['ALBUMY_PHOTO_SIZE']['small'])
@@ -163,7 +167,8 @@ def upload():
             filename=filename,
             filename_m=filename_m,
             filename_s=filename_s,
-            description=description,  ##
+            description=description,
+            author=current_user
         )
         db.session.add(photo)
         db.session.commit()

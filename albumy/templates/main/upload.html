@@ -14,7 +14,13 @@
     </div>
     <div class="row">
         <div class="col-md-12">
-            {{ dropzone.create(action='main.upload') }}
+            <form method="post" enctype="multipart/form-data">
+                {{ form.csrf_token }}
+                <input type="file" name="photo" required>
+                {{ form.description.label }}
+                {{ form.description(class='form-control') }}
+                {{ form.submit(class='btn btn-primary') }}
+            </form>
             <a class="btn btn-light float-right" href="{{ url_for('user.index', username=current_user.username) }}">
                 Done
             </a>
