@@ -9,9 +9,11 @@
         <div class="col-md-8">
             <div class="photo">
                 <a href="{{ url_for('.get_image', filename=photo.filename) }}" target="_blank">
-                    <!-- add alt -->
+                    <!-- add alt; title; aria-label -->
                     <img src="{{ url_for('main.get_image', filename=photo.filename) }}" 
-                         alt="{{ photo.description or 'No description available' }}" 
+                         alt="{{ photo.description or 'No description available' }}"
+                         title="{{ photo.description or 'No description available' }}" 
+                         aria-label="{{ photo.description or 'No description available' }}" 
                          class="img-fluid">
                 </a>
             </div>
