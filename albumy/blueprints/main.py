@@ -5,7 +5,8 @@
     :copyright: © 2018 Grey Li <withlihui@gmail.com>
     :license: MIT, see LICENSE for more details.
 """
-import os
+import os ##
+from dotenv import load_dotenv ##
 
 from flask import render_template, flash, redirect, url_for, current_app, \
     send_from_directory, request, abort, Blueprint
@@ -18,6 +19,8 @@ from albumy.forms.main import DescriptionForm, TagForm, CommentForm
 from albumy.models import User, Photo, Tag, Follow, Collect, Comment, Notification
 from albumy.notifications import push_comment_notification, push_collect_notification
 from albumy.utils import rename_image, resize_image, redirect_back, flash_errors
+from azure.cognitiveservices.vision.computervision import ComputerVisionClient
+from msrest.authentication import CognitiveServicesCredentials
 
 main_bp = Blueprint('main', __name__)
 
@@ -114,26 +117,59 @@ def get_avatar(filename):
     return send_from_directory(current_app.config['AVATARS_SAVE_PATH'], filename)
 
 
+def init_vision_client():
+    try:
+        credential = CognitiveServicesCredentials(os.getenv('AZURE_API_KEY'))
+        return ComputerVisionClient(
+            endpoint=os.getenv('AZURE_ENDPOINT'),
+            credentials=credential
+        )
+    except Exception as e:
+        current_app.logger.error(f'Failed to initialize Vision client: {str(e)}')
+        return None
+
+
 @main_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
 @confirm_required
 @permission_required('UPLOAD')
 def upload():
-    if request.method == 'POST' and 'file' in request.files:
-        f = request.files.get('file')
+    form = UploadForm()
+    if form.validate_on_submit():
+        f = form.photo.data
         filename = rename_image(f.filename)
         f.save(os.path.join(current_app.config['ALBUMY_UPLOAD_PATH'], filename))
         filename_s = resize_image(f, filename, current_app.config['ALBUMY_PHOTO_SIZE']['small'])
         filename_m = resize_image(f, filename, current_app.config['ALBUMY_PHOTO_SIZE']['medium'])
+        
+        # if no description, use Azure API 
+        description = form.description.data
+        if not description:
+            try:
+                vision_client = init_vision_client()
+                if vision_client:
+                    image_path = os.path.join(current_app.config['ALBUMY_UPLOAD_PATH'], filename)
+                    with open(image_path, 'rb') as image_file:
+                        description_result = vision_client.describe_image_in_stream(image_file)
+                        if description_result.captions:
+                            description = description_result.captions[0].text
+                        else:
+                            description = "No description available"
+            except Exception as e:
+                current_app.logger.error(f'Failed to generate image description: {str(e)}')
+                description = "No description available"
+
         photo = Photo(
             filename=filename,
-            filename_s=filename_s,
             filename_m=filename_m,
-            author=current_user._get_current_object()
+            filename_s=filename_s,
+            description=description,  ##
         )
         db.session.add(photo)
         db.session.commit()
-    return render_template('main/upload.html')
+        flash('Photo uploaded.', 'success')
+        return redirect(url_for('.show_photo', photo_id=photo.id))
+    return render_template('main/upload.html', form=form)
 
 
 @main_bp.route('/photo/<int:photo_id>')
